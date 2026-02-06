@@ -4,25 +4,30 @@
 
 #include <iostream>
 #include <ostream>
-
 #include "UDPsocket.h"
+#include <thread>
+
 
 int main () {
     rudp::UDPsocket socket;
-    socket.sendTo("dupa jaś","127.0.0.1",8080);
+    std::thread thr1(&rudp::UDPsocket::reciveThread,&socket,1);
+    std::thread thr2(&rudp::UDPsocket::reciveThread,&socket,2);
 
-    char MTUbuffer[1500];
-
-    std::string from;
-    int port;
-
-    int data_cnt = socket.recive(MTUbuffer,sizeof(MTUbuffer),from,port);
-    if (data_cnt > 0) {
-        std::string mess(MTUbuffer,data_cnt);
-        std::cout<<"Wiadomość od:"<<from<<" port: "<<port<<std::endl;
-        std::cout<< "\n" <<mess<<std::endl;
-    }
-
+    // socket.sendTo("dupa jaś","127.0.0.1",8080);
+    //
+    // char MTUbuffer[1500];
+    //
+    // std::string from;
+    // int port;
+    //
+    // int data_cnt = socket.recive(MTUbuffer,sizeof(MTUbuffer),from,port);
+    // if (data_cnt > 0) {
+    //     std::string mess(MTUbuffer,data_cnt);
+    //     std::cout<<"Wiadomość od:"<<from<<" port: "<<port<<std::endl;
+    //     std::cout<< "\n" <<mess<<std::endl;
+    // }
+    thr1.join();
+    thr2.join();
     return 0;
 
 }

@@ -5,8 +5,13 @@
 #ifndef RUDP_PROTOCOL_FROM_SCRATCH_UDPSOCKET_H
 #define RUDP_PROTOCOL_FROM_SCRATCH_UDPSOCKET_H
 
+#include <atomic>
 #include <string>
 #include <netinet/in.h>
+#include <mutex>
+#include <queue>
+
+#include "RUDPpacket.h"
 
 
 namespace rudp {
@@ -14,6 +19,9 @@ namespace rudp {
     public:
         UDPsocket();
         ~UDPsocket();
+        std::mutex queue_mutex;
+        void reciveThread();
+
         void sendTo(const std::string& mess, const std::string& ip, int port) const;
         void bindPort(int port) const;
 
@@ -23,7 +31,10 @@ namespace rudp {
         UDPsocket(const UDPsocket&) = delete;
         UDPsocket& operator=(const UDPsocket&) = delete;
     private:
+        std::atomic<bool> running = true;
+        std::queue<rudppacket::RUDPpacket> syncQueue;
         int socket_udp_;
+
     };
 }
 

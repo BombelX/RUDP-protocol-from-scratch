@@ -11,4 +11,5 @@ add_executable(rudp_app
         src/UDPsocket.cpp
         src/UDPsocket.cpp
         include/UDPsocket.h
+        include/RUDPpacket.h
 )
