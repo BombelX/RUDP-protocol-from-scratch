@@ -92,23 +92,98 @@ namespace rudp {
 
     }
 
-    void UDPsocket::processPackets() {
-        std::unique_lock<std::mutex> lock(process_mtx);
-        rudppacket::RUDPpacket recived_packet ;
-        process_cv.wait(lock);
-        if (!syncQueue.empty()) {
-            {
-            std::lock_guard<std::mutex> lock_sq(queue_mutex);
-            recived_packet = std::move(syncQueue.front());
-            syncQueue.pop();
-            }
-            if (pendingPackets.count(recived_packet.header.seq_number) > 0) {
+    bool UDPsocket::addToPq(TimerEntry packet_identifier) { // require process mutex
+        if (packet_identifier.attempt_cnt <= ATTEMPT_LIMIT) {
+            TimerEntry new_timer_entry;
+            new_timer_entry.attempt_cnt = packet_identifier.attempt_cnt+1;
+            new_timer_entry.expireTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
+            new_timer_entry.seqNumber = packet_identifier.seqNumber;
 
+            packets_pq.push(new_timer_entry);
+            return true;
+        }
+        return false;
+    }
+
+    void UDPsocket::sendRaw(const rudppacket::RUDPpacket& packet) {
+        // TODO implement sending
+    }
+
+    void UDPsocket::sendReliable(const std::string &mess, const std::string &ip, int port) {
+        uint32_t seq_number = 0;
+        size_t MAX_PAYLOAD = 1200;
+        size_t offset = 0;
+        while (offset < mess.size()) {
+            int chunk_size = std::min(MAX_PAYLOAD,mess.size() - offset);
+            rudppacket::RUDPpacket packet;
+            packet.header.seq_number = seq_number++;
+            packet.header.ack_number = ack_number++;
+            packet.header.data_size = chunk_size;
+
+            std::memcpy(packet.payload.get(), mess.data()+offset, chunk_size);
+            packet.address.sin_family = AF_INET;
+            packet.address.sin_port = htons(port);
+            inet_pton(AF_INET, ip.c_str(), &packet.address.sin_addr.s_addr);
+            this -> sendRaw(packet);
+            {
+                std::lock_guard<std::mutex> lock(process_mtx);
+                TimerEntry timer;
+                timer.seqNumber = packet.header.seq_number;
+                timer.attempt_cnt = 0;
+                timer.expireTime = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
+                packets_pq.push(timer);
+                pendingPackets[packet.header.seq_number] = std::move(packet);
             }
+            process_cv.notify_one();
+            offset += chunk_size;
 
 
         }
+    }
 
+    void UDPsocket::processPackets() {
+
+        while (running) {
+            std::unique_lock<std::mutex> lock(process_mtx);
+            rudppacket::RUDPpacket recived_packet ;
+            if (syncQueue.empty() && running) {
+                if (packets_pq.empty()) {
+                    process_cv.wait(lock, [this] { return !syncQueue.empty() || !running; });
+                } else {
+                    process_cv.wait_until(lock, packets_pq.top().expireTime, [this] {
+                        return !syncQueue.empty() || !running;
+                    });
+                }
+            }
+
+            if (!running) break;
+            while (!syncQueue.empty()) {
+                {
+                std::lock_guard<std::mutex> lock_sq(queue_mutex);
+                recived_packet = std::move(syncQueue.front());
+                syncQueue.pop();
+                }
+                if (pendingPackets.count(recived_packet.header.seq_number) > 0) {
+                    pendingPackets.erase(recived_packet.header.seq_number);
+
+                }
+
+                else {
+                    //TODO processing new packages another then ACK
+
+                }
+
+                //clearing a pq
+                }
+            auto now = std::chrono::steady_clock::now();
+            while (!packets_pq.empty() && packets_pq.top().expireTime < now ) {
+                bool to_resend = addToPq(packets_pq.top());
+                if (to_resend) {
+                    std::cout << "resending" << std::endl;
+                }
+                packets_pq.pop();
+            }
+        }
     }
 
 
