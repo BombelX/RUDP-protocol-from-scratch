@@ -30,6 +30,8 @@ namespace rudp {
     };
     UDPsocket::~UDPsocket() {
         running = false;
+        process_cv.notify_all();
+
         std::cout << "Socket closed";
         if (socket_udp_ >= 0) {
             close(socket_udp_);
@@ -89,6 +91,26 @@ namespace rudp {
         std::cout << "End" << std::endl;
 
     }
+
+    void UDPsocket::processPackets() {
+        std::unique_lock<std::mutex> lock(process_mtx);
+        rudppacket::RUDPpacket recived_packet ;
+        process_cv.wait(lock);
+        if (!syncQueue.empty()) {
+            {
+            std::lock_guard<std::mutex> lock_sq(queue_mutex);
+            recived_packet = std::move(syncQueue.front());
+            syncQueue.pop();
+            }
+            if (pendingPackets.count(recived_packet.header.seq_number) > 0) {
+
+            }
+
+
+        }
+
+    }
+
 
     void UDPsocket::bindPort(int port) const {
         std::cout << port << std::endl;
